@@ -16,7 +16,8 @@ Beautiful, production-ready internship assignment using **FastAPI + YFinance + T
 1. `pip install -r requirements.txt`
 2. `cp .env.example .env` and paste your key
 3. `uvicorn main:app --reload`
-4. Open http://localhost:8000
+4. Open https://jarnox-stock-intelligence-dashboard.onrender.com
+
 
 First load may take 30–60 seconds (caches full history for 6 stocks). After that — instant.
 
