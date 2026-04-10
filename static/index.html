@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JarNox • Stock Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+        body { font-family: 'Inter', system_ui, sans-serif; }
+        .title-font { font-family: 'Space Grotesk', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(16px); }
+        .positive { color: #00ff9d; }
+        .negative { color: #ff3b5c; }
+    </style>
+</head>
+<body class="bg-zinc-950 text-white">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col">
+            <div class="p-6 border-b border-zinc-800">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center text-black font-bold text-2xl">J</div>
+                    <h1 class="title-font text-3xl tracking-tighter">JarNox</h1>
+                </div>
+                <p class="text-emerald-400 text-sm mt-1">Stock Intelligence Dashboard</p>
+            </div>
+
+            <div class="p-4">
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-zinc-400"></i>
+                    <input id="search-input" type="text" placeholder="Search stocks..." 
+                           class="w-full bg-zinc-800 border border-zinc-700 focus:border-emerald-500 rounded-3xl py-3 pl-11 pr-4 text-sm outline-none">
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto px-3" id="companies-list"></div>
+
+            <div class="p-4 border-t border-zinc-800 text-xs text-zinc-400">
+                Powered by FastAPI + yfinance
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col">
+            <div class="h-16 border-b border-zinc-800 bg-zinc-900 px-8 flex items-center justify-between">
+                <div class="flex items-center gap-8">
+                    <h2 id="current-symbol" class="title-font text-3xl font-semibold">Select a stock</h2>
+                    <div id="current-name" class="text-zinc-400 text-lg"></div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button onclick="showCompareModal()" 
+                            class="flex items-center gap-2 px-6 py-2.5 bg-white text-zinc-900 hover:bg-emerald-400 hover:text-white rounded-3xl font-medium transition-all">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <span>Compare Stocks</span>
+                    </button>
+                    <button onclick="refreshCurrentStock()" 
+                            class="w-10 h-10 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition-colors">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 p-8 overflow-auto">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="summary-cards"></div>
+
+                <!-- Chart -->
+                <div class="bg-zinc-900 rounded-3xl p-6 mb-8 border border-zinc-800">
+                    <div class="flex justify-between mb-6">
+                        <div class="font-medium flex items-center gap-2">
+                            <i class="fa-solid fa-chart-line text-emerald-400"></i> PRICE HISTORY
+                        </div>
+                        <div class="flex bg-zinc-800 rounded-3xl p-1 text-sm">
+                            <button onclick="changePeriod(30)" id="period-30" class="px-5 py-1 rounded-3xl bg-emerald-500 text-black">30 DAYS</button>
+                            <button onclick="changePeriod(90)" id="period-90" class="px-5 py-1 rounded-3xl">90 DAYS</button>
+                            <button onclick="changePeriod(365)" id="period-365" class="px-5 py-1 rounded-3xl">1 YEAR</button>
+                        </div>
+                    </div>
+                    <div class="h-96">
+                        <canvas id="price-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Table + Insights -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-zinc-900 rounded-3xl p-6 border border-zinc-800">
+                        <h3 class="font-medium mb-4">RECENT DATA</h3>
+                        <div class="overflow-auto max-h-96" id="data-table"></div>
+                    </div>
+
+                    <div class="bg-zinc-900 rounded-3xl p-6 border border-zinc-800 flex flex-col">
+                        <h3 class="font-medium mb-4">Key Insights</h3>
+                        <div id="insights-content" class="flex-1"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compare Modal -->
+    <div id="compare-modal" onclick="if(event.target.id==='compare-modal') hideCompareModal()" 
+         class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div onclick="event.stopImmediatePropagation()" 
+             class="bg-zinc-900 w-full max-w-2xl mx-4 rounded-3xl p-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">Compare Two Stocks</h2>
+                <button onclick="hideCompareModal()" class="text-2xl text-zinc-400 hover:text-white">×</button>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-zinc-400 text-sm mb-2">Stock 1</label>
+                    <select id="compare-symbol1" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4 text-lg"></select>
+                </div>
+                <div>
+                    <label class="block text-zinc-400 text-sm mb-2">Stock 2</label>
+                    <select id="compare-symbol2" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4 text-lg"></select>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-center">
+                <button onclick="performComparison()" 
+                        class="px-10 py-4 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold rounded-3xl flex items-center gap-3">
+                    <i class="fa-solid fa-arrows-left-right"></i>
+                    COMPARE PERFORMANCE
+                </button>
+            </div>
+
+            <div id="compare-results" class="hidden mt-10"></div>
+        </div>
+    </div>
+
+    <script>
+        let companies = [];
+        let currentSymbol = null;
+        let priceChart = null;
+        let allDataCache = {};
+
+        async function loadCompanies() {
+            const res = await fetch('/companies');
+            companies = await res.json();
+            
+            const container = document.getElementById('companies-list');
+            container.innerHTML = companies.map(c => `
+                <div onclick="selectStock('${c.symbol}', '${c.name}')" 
+                     class="stock-card flex items-center gap-3 px-4 py-4 hover:bg-zinc-800 rounded-3xl mb-1 cursor-pointer">
+                    <div class="w-8 h-8 bg-white/10 rounded-2xl flex items-center justify-center text-sm font-mono">${c.symbol.substring(0,3)}</div>
+                    <div class="flex-1">
+                        <div class="font-medium">${c.name}</div>
+                        <div class="text-xs text-zinc-400 font-mono">${c.symbol}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Populate compare selects
+            const sel1 = document.getElementById('compare-symbol1');
+            const sel2 = document.getElementById('compare-symbol2');
+            sel1.innerHTML = companies.map(c => `<option value="${c.symbol}">${c.name} (${c.symbol})</option>`).join('');
+            sel2.innerHTML = companies.map(c => `<option value="${c.symbol}">${c.name} (${c.symbol})</option>`).join('');
+        }
+
+        async function selectStock(symbol, name) {
+            currentSymbol = symbol;
+            document.getElementById('current-symbol').textContent = symbol;
+            document.getElementById('current-name').textContent = name;
+
+            // Loading
+            document.getElementById('summary-cards').innerHTML = `<div class="col-span-4 py-12 text-center"><i class="fa-solid fa-spinner animate-spin text-4xl"></i></div>`;
+            document.getElementById('data-table').innerHTML = `<div class="py-12 text-center text-zinc-400"><i class="fa-solid fa-spinner animate-spin"></i></div>`;
+
+            try {
+                const [summaryRes, dataRes] = await Promise.all([
+                    fetch(`/summary/${symbol}`),
+                    fetch(`/data/${symbol}`)
+                ]);
+
+                const summary = await summaryRes.json();
+                const payload = await dataRes.json();
+                const data = payload.data || [];
+
+                allDataCache[symbol] = data;
+
+                renderSummaryCards(summary, data);
+                renderDataTable(data);
+                renderChart(data);
+                renderInsights(data, summary);
+
+            } catch (err) {
+                console.error(err);
+                alert(`Failed to load ${symbol}. Check console (F12)`);
+            }
+        }
+
+        function renderSummaryCards(summary, data) {
+            const latest = data[data.length-1] || {};
+            const ret = latest.daily_return || 0;
+            document.getElementById('summary-cards').innerHTML = `
+                <div class="glass rounded-3xl p-6">
+                    <div class="text-emerald-400 text-sm">CURRENT PRICE</div>
+                    <div class="text-4xl font-mono mt-1">₹${parseFloat(latest.close||0).toFixed(2)}</div>
+                    <div class="${ret>=0?'positive':'negative'} text-sm mt-2">${ret.toFixed(2)}% today</div>
+                </div>
+                <div class="glass rounded-3xl p-6">
+                    <div class="text-zinc-400 text-sm">52-WEEK HIGH</div>
+                    <div class="text-4xl font-mono mt-1">₹${summary['52_week_high']||'—'}</div>
+                </div>
+                <div class="glass rounded-3xl p-6">
+                    <div class="text-zinc-400 text-sm">52-WEEK LOW</div>
+                    <div class="text-4xl font-mono mt-1">₹${summary['52_week_low']||'—'}</div>
+                </div>
+                <div class="glass rounded-3xl p-6">
+                    <div class="text-zinc-400 text-sm">AVG CLOSE (1Y)</div>
+                    <div class="text-4xl font-mono mt-1">₹${summary['average_close']||'—'}</div>
+                </div>
+            `;
+        }
+
+        function renderDataTable(data) {
+            let html = `<table class="w-full text-sm"><thead><tr class="border-b border-zinc-700 text-zinc-400"><th class="py-3 text-left">DATE</th><th>OPEN</th><th>HIGH</th><th>LOW</th><th>CLOSE</th><th>RETURN %</th><th>MA 7</th></tr></thead><tbody>`;
+            data.forEach(row => {
+                const ret = row.daily_return || 0;
+                html += `<tr class="border-b border-zinc-800 hover:bg-zinc-800/50">
+                    <td class="py-3 font-mono">${row.date}</td>
+                    <td class="font-mono">₹${parseFloat(row.open||0).toFixed(2)}</td>
+                    <td class="font-mono">₹${parseFloat(row.high||0).toFixed(2)}</td>
+                    <td class="font-mono">₹${parseFloat(row.low||0).toFixed(2)}</td>
+                    <td class="font-mono font-semibold">₹${parseFloat(row.close||0).toFixed(2)}</td>
+                    <td class="${ret>=0?'positive':'negative'}">${ret.toFixed(2)}%</td>
+                    <td class="font-mono">${row.ma7 ? parseFloat(row.ma7).toFixed(2) : '—'}</td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+            document.getElementById('data-table').innerHTML = html;
+        }
+
+        function renderChart(data) {
+            if (priceChart) priceChart.destroy();
+            const ctx = document.getElementById('price-chart');
+            const labels = data.map(d => d.date);
+            const closes = data.map(d => parseFloat(d.close || 0));
+
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{ label: 'Close Price', data: closes, borderColor: '#00ff9d', borderWidth: 3, tension: 0.3 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }}
+                }
+            });
+        }
+
+        function renderInsights(data, summary) {
+            const returns = data.map(d => d.daily_return || 0).filter(v => v != null);
+            const volatility = returns.length ? (Math.sqrt(returns.reduce((a,b) => a + b*b, 0) / returns.length) * 100) : 0;
+
+            document.getElementById('insights-content').innerHTML = `
+                <div class="p-4 bg-zinc-800 rounded-2xl">
+                    <div class="text-xs text-zinc-400">VOLATILITY</div>
+                    <div class="text-3xl font-mono">${volatility.toFixed(1)}%</div>
+                </div>
+                <div class="mt-4 text-sm text-zinc-300">
+                    ${summary['52_week_high'] ? `Currently ${((parseFloat(data[data.length-1]?.close || 0) / summary['52_week_high'] * 100).toFixed(0))}% below 52-week high.` : ''}
+                </div>
+            `;
+        }
+
+        function changePeriod(days) {
+            if (!allDataCache[currentSymbol]) return;
+            const filtered = allDataCache[currentSymbol].slice(-days);
+            renderChart(filtered);
+
+            document.querySelectorAll('#period-30, #period-90, #period-365').forEach(btn => {
+                const active = parseInt(btn.id.split('-')[1]) === days;
+                btn.classList.toggle('bg-emerald-500', active);
+                btn.classList.toggle('text-black', active);
+            });
+        }
+
+        async function refreshCurrentStock() {
+            if (currentSymbol) selectStock(currentSymbol, document.getElementById('current-name').textContent);
+        }
+
+        function showCompareModal() {
+            document.getElementById('compare-modal').classList.remove('hidden');
+        }
+
+        function hideCompareModal() {
+            document.getElementById('compare-modal').classList.add('hidden');
+            document.getElementById('compare-results').classList.add('hidden');
+        }
+
+        async function performComparison() {
+            const s1 = document.getElementById('compare-symbol1').value;
+            const s2 = document.getElementById('compare-symbol2').value;
+            if (s1 === s2) {
+                alert("Please select two different stocks");
+                return;
+            }
+            try {
+                const res = await fetch(`/compare?symbol1=${s1}&symbol2=${s2}`);
+                const result = await res.json();
+                
+                document.getElementById('compare-results').innerHTML = `
+                    <div class="bg-emerald-500/10 border border-emerald-400 rounded-3xl p-8 text-center">
+                        <div class="text-emerald-400 text-sm mb-2">CORRELATION</div>
+                        <div class="text-6xl font-mono font-bold text-emerald-400">${result.correlation}</div>
+                        <p class="mt-4 text-zinc-400">between last 30 days closing prices</p>
+                    </div>
+                `;
+                document.getElementById('compare-results').classList.remove('hidden');
+            } catch (e) {
+                alert("Comparison failed. Please try again.");
+            }
+        }
+
+        async function main() {
+            await loadCompanies();
+            if (companies.length > 0) {
+                setTimeout(() => selectStock(companies[0].symbol, companies[0].name), 800);
+            }
+        }
+
+        window.onload = main;
+    </script>
+</body>
+</html>
